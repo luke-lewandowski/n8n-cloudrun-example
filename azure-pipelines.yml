@@ -1,0 +1,79 @@
+# Docker
+# Build a Docker image
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+  - master
+  - develop
+  - release/*
+
+pr:
+  autoCancel: true
+
+pool:
+  vmImage: "ubuntu-latest"
+
+variables:
+  tag: "$(Build.BuildId)"
+  imageName: "n8n"
+  accountNamePrefix: "n8n"
+
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: Build
+        displayName: Build
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: DockerInstaller@0
+            displayName: Install Docker
+            inputs:
+              dockerVersion: "17.09.0-ce"
+          - task: Bash@3
+            displayName: Build n8n
+            inputs:
+              targetType: "inline"
+              script: "docker build --tag gcr.io/$(accountNamePrefix)-dev/$(imageName):$(TAG) --tag gcr.io/$(accountNamePrefix)-test/$(imageName):$(TAG) --tag gcr.io/$(accountNamePrefix)-prod/$(imageName):$(TAG) ."
+
+          - task: Docker@2
+            displayName: Dev - GCR - Login
+            inputs:
+              command: login
+              containerRegistry: "$(accountNamePrefix)-dev-gcr"
+          - task: Bash@3
+            displayName: Push to Dev
+            inputs:
+              targetType: "inline"
+              script: "docker push gcr.io/$(accountNamePrefix)-dev/$(imageName):$(TAG)"
+          - task: Docker@2
+            displayName: Dev - GCR - Logout
+            inputs:
+              command: logout
+              containerRegistry: "$(accountNamePrefix)-dev-gcr"
+
+          - task: Docker@2
+            displayName: Prod - GCR - Login
+            inputs:
+              command: login
+              containerRegistry: "$(accountNamePrefix)-prod-gcr"
+          - task: Bash@3
+            displayName: Push to Prod
+            inputs:
+              targetType: "inline"
+              script: "docker push gcr.io/$(accountNamePrefix)-prod/$(imageName):$(TAG)"
+          - task: Docker@2
+            displayName: Prod - GCR - Logout
+            inputs:
+              command: logout
+              containerRegistry: "$(accountNamePrefix)-prod-gcr"
+
+  - stage: Publish
+    displayName: Publish Artifacts
+    jobs:
+      - job: Terraform
+        displayName: Terraform
+        steps:
+          - publish: $(System.DefaultWorkingDirectory)/infrastructure
+            artifact: infrastructure

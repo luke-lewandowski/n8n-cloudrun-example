@@ -1,0 +1,8 @@
+version: "3"
+services:
+  n8n:
+    build:
+      context: ../../
+      dockerfile: ./Dockerfile
+    ports:
+      - 5678:5678
